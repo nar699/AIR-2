@@ -1,0 +1,59 @@
+//Case Study 1
+
+//Dataset1
+LOAD CSV WITH HEADERS FROM 'https://docs.google.com/spreadsheets/d/1RwUs_cg-FIfKNncIQfwJ-a32LNR2YiWOL-R7DwaW6P4/gviz/tq?tqx=out:csv&sheet=0' AS d1
+CREATE (p:Plane{planeID: ToInteger(d1.planeID), retirement_year: ToInteger(d1.retirement_year),plane_type_name:d1.type_plane, airline: d1.name, maintenances: ToInteger(d1.maintenance_count), pieces: ToInteger(d1.piece_count), total_cost: ToInteger(d1.cost_sum)});
+
+//Dataset2
+LOAD CSV WITH HEADERS FROM 'https://docs.google.com/spreadsheets/d/1Q4CG--lyg29N4q9MUW3KJgi94OUJ7-QRLhcPQyXAdXw/gviz/tq?tqx=out:csv&sheet=0'AS d2
+CREATE(a:Airport {airportID: ToInteger(d2.airportID), airport_name: d2.airport_name, altitude: ToInteger(d2.airport_altitude)})
+MERGE(c:City{ cityID: ToInteger(d2.cityID), city_name: d2.city_name, time_zone: ToInteger(d2.city_timezone)})
+MERGE(co:Country{ country_name: d2.country_name})
+CREATE(a)-[:Located_in]->(c)
+CREATE(c)-[:City_from]->(co)
+
+//Dataset12
+LOAD CSV WITH HEADERS FROM 'https://docs.google.com/spreadsheets/d/1yAfXPbNu_hoZc05ZxNS0ijnpi-edzbJ75xZGDhX4ItA/gviz/tq?tqx=out:csv&sheet=0'AS d12 WITH d12
+MATCH(a:Airport)
+MATCH(a2:Airport)
+MATCH(p:Plane)
+WHERE p.planeID = ToInteger(d12.planeID)
+AND a.airportID = ToInteger(d12.departure)
+AND a2.airportID= ToInteger(d12.destination)
+CREATE
+(p)-[:departure]->(a),
+(p)-[:destination]->(a2)
+
+
+
+//QUERIES
+
+//QUERY 1
+MATCH (p:Plane)
+WHERE NOT (p)-[:departure]->(:Airport) AND  NOT (p)-[:destination]->(:Airport) AND p.pieces<8
+RETURN p
+
+//QUERY 2
+MATCH (p:Plane)-[:departure]->(a:Airport)
+WITH p, collect(distinct a) as dif_airport, count(distinct a) as count_airport
+MATCH (p:Plane)-[:destination]->(a2:Airport)
+WHERE  NOT a2 IN dif_airport
+WITH p as plane, count_airport + count(distinct a2) as total_airports
+ORDER BY total_airports DESC
+RETURN plane,total_airports
+
+//QUERY 3
+MATCH (p:Plane)-[:departure]->(a:Airport)-[:Located_in]->()-[:City_from]->(c:Country)
+WHERE a.altitude > 100
+WITH p, collect(distinct c) as dep_countries, count(distinct c) as count_countries
+MATCH (p2:Plane)-[:destination]->(a2:Airport)-[:Located_in]->()-[:City_from]->(c:Country)
+WHERE p2.planeID =p.planeID AND a2.altitude > 100 AND NOT c IN dep_countries
+WITH p as plane,  count_countries + count(distinct c ) as total_countries
+RETURN plane,total_countries
+
+
+//QUERY 4
+MATCH n = shortestpath((:Country{country_name: 'Greece'})-[*]-(:Country{country_name: 'Singapore'}))  RETURN n
+
+//QUERY 5
+MATCH n = allShortestPaths((:Country{country_name: 'Laos'})-[*]-(:Country{country_name: 'South Korea'}))  RETURN n

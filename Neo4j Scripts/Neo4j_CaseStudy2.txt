@@ -1,0 +1,114 @@
+//Case study 2
+
+//Dataset1
+LOAD CSV WITH HEADERS FROM 'https://docs.google.com/spreadsheets/d/13QonPrcKzPn0YjHpxcX-xP2ZNDboezsOUBAk0PeV6qU/gviz/tq?tqx=out:csv&sheet=0' as d1
+WITH SPLIT(d1.languages, ", ") AS lang
+FOREACH (l IN lang | MERGE (:Language {language_name: l}));
+
+LOAD CSV WITH HEADERS FROM 'https://docs.google.com/spreadsheets/d/13QonPrcKzPn0YjHpxcX-xP2ZNDboezsOUBAk0PeV6qU/gviz/tq?tqx=out:csv&sheet=0'
+AS d1
+CREATE (p:Pilot{pilotID: ToInteger(d1.pilotID), pilot_name: d1.name, surname: d1.surname, email: d1.email,
+                sex: d1.sex, salary: ToInteger(d1.salary), years_working: ToInteger(d1.years_working)})
+
+
+LOAD CSV WITH HEADERS FROM 'https://docs.google.com/spreadsheets/d/13QonPrcKzPn0YjHpxcX-xP2ZNDboezsOUBAk0PeV6qU/gviz/tq?tqx=out:csv&sheet=0'
+AS d1
+MATCH (l:Language),(p:Pilot{pilotID: ToInteger(d1.pilotID)}) WHERE d1.languages CONTAINS l.language_name
+CREATE (l)<-[:Speak]-(p)
+
+//Dataset2_2
+LOAD CSV WITH HEADERS FROM 'https://docs.google.com/spreadsheets/d/1rROZSrXF_F7FjCkWS_ycLu-dUeCsuFFCOQrFsVc7J54/gviz/tq?tqx=out:csv&sheet=0' as d2
+WITH SPLIT(d2.languages, ", ") AS lang
+FOREACH (l IN lang | MERGE (:Language {language_name: l}));
+
+LOAD CSV WITH HEADERS FROM 'https://docs.google.com/spreadsheets/d/1rROZSrXF_F7FjCkWS_ycLu-dUeCsuFFCOQrFsVc7J54/gviz/tq?tqx=out:csv&sheet=0'
+AS d2
+CREATE(ft:FlightAttendant {flightattendantID: ToInteger(d2.flightattendantID), FlightAttendant_name: d2.name, surname: (d2.surname),sex:d2.sex, salary: ToInteger(d2.salary), years_working: ToInteger(d2.years_working)});
+
+LOAD CSV WITH HEADERS FROM 'https://docs.google.com/spreadsheets/d/1rROZSrXF_F7FjCkWS_ycLu-dUeCsuFFCOQrFsVc7J54/gviz/tq?tqx=out:csv&sheet=0'
+AS d2
+MATCH (l:Language),(ft:FlightAttendant {flightattendantID: ToInteger(d2.flightattendantID)}) WHERE d2.languages CONTAINS l.language_name
+CREATE (l)<-[:Speak]-(ft);
+
+//Dataset2_12
+
+LOAD CSV WITH HEADERS FROM 'https://docs.google.com/spreadsheets/d/1WBJbm-YJ1hgUSqZi1KY4ipMwYlIZR1-PUoWIg485Rmc/gviz/tq?tqx=out:csv&sheet=0' as d12
+MERGE  (f:Flight{flight_name:ToInteger(d12.flightID), date: date(d12.date)})
+MERGE (a_destination:Airport{airport_name:ToInteger(d12.destination_airportID)})
+MERGE (a_departure:Airport{airport:ToInteger(d12.departure_airportID)})
+CREATE (f)-[:Departs]->(a_departure),
+(f)-[:Arrive]->(a_destination)
+
+LOAD CSV WITH HEADERS FROM 'https://docs.google.com/spreadsheets/d/1WBJbm-YJ1hgUSqZi1KY4ipMwYlIZR1-PUoWIg485Rmc/gviz/tq?tqx=out:csv&sheet=0' as d12
+MATCH(f:Flight)
+MATCH(ft:FlightAttendant)
+MATCH(p:Pilot)
+WHERE p.pilotID = ToInteger(d12.pilotID)
+AND ft.flightattendantID = ToInteger(d12.flightattendantID)
+AND f.flight_name= ToInteger(d12.flightID)
+CREATE
+(p)-[:Flew]->(f),
+(ft)-[:Flew]->(f)
+
+
+//QUERIES
+
+//QUERY 1
+MATCH(fa1:FlightAttendant)-[:Flew]->(:Flight)<-[:Flew]-(fa2:FlightAttendant)
+MERGE (fa1)-[c:Colleague]-(fa2)
+RETURN (fa1)-[c]->(fa2)
+
+
+//QUERY 2
+CALL {
+	MATCH(fa:FlightAttendant)-[:Flew]->(:Flight)-[:Departs]->(:Airport)<-[:Arrive]-(f2:Flight)<-[:Flew]-(fa2:FlightAttendant)
+	WHERE (fa)-[:Speak]->(:Language)<-[:Speak]-(fa2)
+	AND NOT (fa)-[:Colleague]-(fa2)
+	RETURN fa, fa2
+
+	UNION ALL
+
+	MATCH(fa:FlightAttendant)-[:Flew]->(:Flight)-[:Departs]->(:Airport)<-[:Departs]-(f2:Flight)<-[:Flew]-(fa2:FlightAttendant)
+	WHERE (fa)-[:Speak]->(:Language)<-[:Speak]-(fa2)
+	AND NOT (fa)-[:Colleague]-(fa2)
+	RETURN fa, fa2
+
+	UNION ALL
+
+	MATCH(fa:FlightAttendant)-[:Flew]->(:Flight)-[:Arrive]->(:Airport)<-[:Arrive]-(f2:Flight)<-[:Flew]-(fa2:FlightAttendant)
+	WHERE (fa)-[:Speak]->(:Language)<-[:Speak]-(fa2)
+	AND NOT (fa)-[:Colleague]-(fa2)
+	RETURN fa, fa2
+}
+MERGE (fa)-[aq:Acquaintance]->(fa2)
+RETURN (fa)-[aq]->(fa2)
+
+
+//QUERY 3
+MATCH(pi:Pilot)-[:Flew]->(:Flight)<-[:Flew]-(fa:FlightAttendant)
+WHERE (pi)-[:Speak]->(:Language)<-[:Speak]-(fa)
+AND ABS(pi.years_working - fa.years_working) < 10
+MERGE (pi)-[af:Affair]-(fa)
+RETURN (pi)-[af]-(fa)
+
+
+
+//QUERY 4
+MATCH(pi:Pilot)-[:Affair]-(fa:FlightAttendant),
+     (pi)-[:Speak]->(l:Language)<-[:Speak]-(fa)
+RETURN l, COUNT(l) AS num_affaires
+ORDER BY num_affaires DESC
+
+
+
+//QUERY 5
+MATCH(fa:FlightAttendant)-[:Affair]-(pi:Pilot)-[:Affair]-(fa2:FlightAttendant)
+WHERE (fa)-[:Colleague]-(fa2)
+RETURN pi
+
+
+//QUERY 6
+MATCH (pi:Pilot)-[:Affair]-()
+WITH COUNT(*) AS num_affaires, pi AS pi
+WHERE num_affaires > 1
+RETURN (pi)-[:Affair]-(), (pi)-[:Colleague]-(), (pi)-[:Acquaintance]-()
